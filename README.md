@@ -37,34 +37,6 @@ On Windows:
 .\build.ps1        # gofmt, vet, test, then build to dist\amd64\fgwan.exe
 ```
 
-## Versioning and GitHub releases
-
-fgwan uses semantic versions in `MAJOR.MINOR.PATCH` form. The repository stores the release number in `VERSION`, while release tags use the same value with a `v` prefix. For example, `VERSION` contains `1.8.0` and the corresponding Git tag is `v1.8.0`.
-
-### Create a release from the local repository
-
-Start from a clean `main` branch, then run:
-
-```powershell
-.\scripts\Release.ps1 -Version 1.8.0
-```
-
-The script validates the branch and working tree, updates version references, creates a release commit, creates an annotated tag, and pushes both `main` and the tag.
-
-Pushing the version tag triggers `.github/workflows/release.yml`. The workflow validates that the tag matches `VERSION`, runs formatting checks, `go vet`, and `go test`, builds the Windows AMD64 binary and deployment ZIP, creates SHA-256 checksums, and publishes all three files in a GitHub Release.
-
-Manual Git commands remain available when needed:
-
-```powershell
-git add .
-git commit -m "chore: release v1.8.0"
-git tag -a v1.8.0 -m "fgwan v1.8.0"
-git push origin main
-git push origin v1.8.0
-```
-
-The tag and `VERSION` must match exactly. Do not reuse or move a published release tag.
-
 ### Upgrade an existing installation
 
 Download the generated deployment ZIP from the GitHub Release, extract it on the target server, and run the deployment script from an elevated PowerShell session:
