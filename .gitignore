@@ -1,0 +1,47 @@
+# Build and release outputs
+/dist/
+/bin/
+*.exe
+*.msi
+*.zip
+*.7z
+*.tar
+*.gz
+*.cer
+*.pfx
+*.p12
+
+# Runtime configuration, secrets, and logs
+config.json
+config.*.json
+!config.example.json
+credentials.dat
+credentials.key
+*.key
+*.pem
+*.crt
+*.log
+logs/
+
+# Go build and test artifacts
+*.test
+*.out
+coverage.*
+profile.*
+/vendor/
+
+# IDE, OS, and temporary files
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.temp
+*.bak
+.cache/
+tmp/

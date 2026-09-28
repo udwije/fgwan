@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fgwan setup</title>
+<style>
+  :root{
+    --bg:#0b0d0f; --panel:#111418; --panel2:#0e1115; --line:#1d232b;
+    --tx:#c9d2da; --mut:#8695a3; --dim:#5b6874;
+    --ok:#5cb372; --warn:#d9a13f; --err:#e05c52; --accent:#4FC3F7;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--tx);
+    font:13px/1.5 var(--mono);-webkit-font-smoothing:antialiased}
+  a{color:#9ccdec}
+  header{display:flex;align-items:center;gap:16px;padding:11px 18px;
+    border-bottom:1px solid var(--line);background:var(--panel2);flex-wrap:wrap}
+  .brand{font-weight:600;letter-spacing:.14em;font-size:12px}
+  .brand span{color:var(--mut);font-weight:400}
+  .livetag{font-size:10px;letter-spacing:.1em;padding:3px 8px;border:1px solid #2c4a36;
+    color:#8fd0a0;background:#101a14;display:none}
+  .steps{display:flex;gap:6px;margin-left:auto;font-size:10px;letter-spacing:.08em}
+  .steps i{padding:4px 9px;border:1px solid var(--line);color:var(--dim);font-style:normal}
+  .steps i.on{border-color:#4b7a9c;color:#9ccdec;background:#131c24}
+  .steps i.done{border-color:#2c4a36;color:#7fb98f}
+  .back{font-size:10px;letter-spacing:.08em;padding:5px 10px;border:1px solid var(--line);
+    text-decoration:none;color:var(--tx);display:none}
+  .back:hover{border-color:#39434f}
+
+  main{max-width:1280px;margin:0 auto;padding:18px}
+  section{border:1px solid var(--line);background:var(--panel);margin-bottom:16px}
+  section.hide{display:none}
+  h2{margin:0;padding:10px 14px;font-size:12px;letter-spacing:.1em;font-weight:600;
+    border-bottom:1px solid var(--line);background:var(--panel2)}
+  h2 small{color:var(--mut);font-weight:400;letter-spacing:.04em;margin-left:10px}
+  h3{font-size:11px;letter-spacing:.1em;color:var(--mut);margin:0 0 8px;font-weight:600}
+  h3 span{color:var(--dim);font-weight:400;letter-spacing:.02em;margin-left:8px}
+  .body{padding:14px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  label{display:block;color:var(--mut);font-size:10px;letter-spacing:.1em;margin-bottom:4px}
+  input,select{width:100%;background:#0c0f13;border:1px solid var(--line);color:var(--tx);
+    font:12px/1 var(--mono);padding:8px 9px}
+  input:focus,select:focus{outline:none;border-color:#4b7a9c}
+  .hint{color:var(--dim);font-size:10px;margin-top:4px}
+
+  button{background:#161a20;border:1px solid var(--line);color:var(--tx);
+    font:11px/1 var(--mono);padding:9px 14px;cursor:pointer;letter-spacing:.06em}
+  button:hover:not(:disabled){border-color:#39434f;background:#1a1f26}
+  button:disabled{opacity:.4;cursor:default}
+  button.sm{padding:5px 9px;font-size:10px}
+  button.primary{border-color:#4b7a9c;color:#9ccdec;background:#131c24}
+  button.go{border-color:#2c4a36;color:#8fd0a0;background:#101a14}
+  button.danger{border-color:#4a2c2c;color:#d99a94}
+  button.on{border-color:#4b7a9c;color:#9ccdec;background:#131c24}
+  .row{display:flex;gap:8px;align-items:center;margin-top:14px;flex-wrap:wrap}
+  .row .sp{flex:1}
+
+  .msg{padding:9px 12px;font-size:11px;margin-top:12px;border:1px solid}
+  .msg.ok{border-color:#26402e;background:#0f1711;color:#8fd0a0}
+  .msg.err{border-color:#3d1f1f;background:#180f0f;color:#d99a95}
+  .msg.warn{border-color:#3a2e14;background:#17130c;color:#d0b070}
+  .msg b{display:block;margin-bottom:3px}
+
+  .zones{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .zrow{display:flex;gap:8px;align-items:center;padding:7px 9px;
+    border:1px solid var(--line);background:#0e1218}
+  .zdot{width:10px;height:10px;border-radius:2px;flex:none}
+  .zrow input.zn{width:170px;padding:5px 7px;font-size:11px}
+  .zrow input.zs{flex:1;padding:5px 7px;font-size:11px}
+  .zcount{color:var(--mut);font-size:10px;white-space:nowrap}
+
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th{text-align:left;color:var(--mut);font-weight:400;font-size:10px;letter-spacing:.08em;
+    padding:6px 8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+  td{padding:5px 8px;border-bottom:1px solid #161b21}
+  tr.assigned td{background:#101720}
+  tr.dim td{opacity:.5}
+  tbody tr:hover td{background:#141a22}
+  .pill{display:inline-block;padding:1px 6px;font-size:9px;border:1px solid var(--line);
+    color:var(--mut);letter-spacing:.06em}
+  .pill.up{border-color:#2c4a36;color:#7fb98f}
+  .pill.down{border-color:#4a2c2c;color:#d99a94}
+  .pill.hc{border-color:#2c3f4a;color:#7fa8b9}
+  .pill.tun{border-color:#43355a;color:#b49ad4}
+  .pill.now{border-color:#3d5240;color:#8fd0a0}
+  .tblwrap{max-height:400px;overflow:auto;border:1px solid var(--line)}
+  select.zsel{width:150px;padding:4px 6px;font-size:11px}
+  select.zsel.none{color:var(--dim)}
+  input.cap{width:80px;padding:4px 6px;font-size:11px}
+  .cnt{color:var(--mut);font-size:10px;margin-top:10px}
+  code{color:#9ccdec}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:11px}
+  .kv div:nth-child(odd){color:var(--mut)}
+  .filters{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+  .filters input.q{width:200px;padding:5px 8px;font-size:11px}
+  .diff{font-size:11px;margin-top:8px}
+  .diff span{display:inline-block;margin-right:14px}
+  .diff .add{color:#8fd0a0} .diff .rem{color:#d99a94} .diff .same{color:var(--mut)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">FGWAN <span>/ setup</span></div>
+  <div class="livetag" id="livetag">LIVE — collector running</div>
+  <a class="back" id="back" href="index.html">&larr; dashboard</a>
+  <div class="steps">
+    <i id="st1" class="on">1 &nbsp;CONNECT</i>
+    <i id="st2">2 &nbsp;ZONES &amp; INTERFACES</i>
+    <i id="st3">3 &nbsp;SAVE</i>
+  </div>
+</header>
+
+<main>
+
+  <!-- ================= step 1 ================= -->
+  <section id="sec1">
+    <h2>1 &nbsp;Connect <small id="sub1">credentials are used to walk the device, then stored encrypted</small></h2>
+    <div class="body">
+      <div class="grid">
+        <div><label>DEVICE ADDRESS</label><input id="host" placeholder="10.20.0.1" autocomplete="off"></div>
+        <div><label>PORT</label><input id="port" value="161" autocomplete="off"></div>
+        <div><label>SECURITY LEVEL</label>
+          <select id="level">
+            <option value="authPriv" selected>authPriv</option>
+            <option value="authNoPriv">authNoPriv</option>
+            <option value="noAuthNoPriv">noAuthNoPriv</option>
+          </select>
+        </div>
+        <div><label>USERNAME</label><input id="user" placeholder="fgt-monitor" autocomplete="off"></div>
+        <div><label>AUTH PROTOCOL</label>
+          <select id="auth"><option>SHA256</option><option>SHA1</option>
+            <option>SHA512</option><option>MD5</option></select>
+        </div>
+        <div><label>PRIV PROTOCOL</label>
+          <select id="priv"><option>AES128</option><option>AES256</option></select>
+          <div class="hint">AES256 requires SHA256 or longer</div>
+        </div>
+        <div><label>AUTH PASSPHRASE</label><input id="apass" type="password" autocomplete="new-password"></div>
+        <div><label>PRIV PASSPHRASE</label><input id="ppass" type="password" autocomplete="new-password"></div>
+      </div>
+
+      <div id="storedbox" class="msg ok" style="display:none">
+        <b>A credential is already stored</b>
+        <span id="storedtxt"></span>
+        <div class="row" style="margin-top:8px">
+          <label style="margin:0;display:flex;align-items:center;gap:7px;letter-spacing:0;font-size:11px;color:var(--tx)">
+            <input type="checkbox" id="usestored" checked style="width:auto"> Reuse it (leave the passphrase fields empty)
+          </label>
+        </div>
+      </div>
+
+      <div class="row">
+        <button id="btnWalk" class="primary">Walk device</button>
+        <span class="sp"></span>
+        <span id="backend" class="hint"></span>
+      </div>
+      <div id="msg1"></div>
+    </div>
+  </section>
+
+  <!-- ================= step 2 ================= -->
+  <section id="sec2" class="hide">
+    <h2>2 &nbsp;Zones and interfaces <small id="devname"></small></h2>
+    <div class="body">
+
+      <h3>ZONES <span>each zone becomes one chart &mdash; add as many as you like, and put any interface in any zone</span></h3>
+      <div class="zones" id="zoneList"></div>
+      <div class="row" style="margin-top:0">
+        <button id="addZone" class="sm">+ add zone</button>
+        <span class="hint">a zone may mix physical interfaces and IPsec tunnels freely</span>
+      </div>
+
+      <h3 style="margin-top:22px">ASSIGN INTERFACES
+        <span>everything the device reported &mdash; pick a zone per row</span></h3>
+      <div class="filters">
+        <button id="fPhys" class="sm on">physical</button>
+        <button id="fTun" class="sm on">tunnels</button>
+        <button id="fNoHC" class="sm">no counters</button>
+        <button id="fDown" class="sm">down</button>
+        <input class="q" id="q" placeholder="search name or alias">
+        <span class="sp"></span>
+        <button id="revert" class="sm">revert to current</button>
+        <button id="clearAll" class="sm danger">unassign all</button>
+      </div>
+      <div class="tblwrap">
+        <table id="tAll">
+          <thead><tr>
+            <th style="width:160px">ZONE</th><th style="width:50px">IDX</th><th>NAME</th>
+            <th>ALIAS / NOTE</th><th style="width:88px">TYPE</th><th style="width:58px">STATE</th>
+            <th style="width:68px">COUNTERS</th><th style="width:90px">CAPACITY Mb/s</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="cnt" id="cnt1"></div>
+      <div class="diff" id="diff"></div>
+
+      <h3 style="margin-top:22px">TUNNEL TABLE COLUMNS
+        <span>detected from live data; override if the counters look wrong</span></h3>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+        <div><label>BASE OID</label><input id="vbase"></div>
+        <div><label>NAME COL</label><input id="vname"></div>
+        <div><label>IN COL</label><input id="vin"></div>
+        <div><label>OUT COL</label><input id="vout"></div>
+        <div><label>STATUS COL</label><input id="vstat"></div>
+        <div><label>UP VALUE</label><input id="vup"></div>
+      </div>
+      <div id="vpnmsg"></div>
+
+      <div class="row">
+        <button id="btnBack">Back</button>
+        <span class="sp"></span>
+        <button id="btnNext" class="primary">Continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= step 3 ================= -->
+  <section id="sec3" class="hide">
+    <h2>3 &nbsp;Review and save</h2>
+    <div class="body">
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+        <div><label>POLL INTERVAL (ms)</label><input id="pollms" value="5000"></div>
+        <div><label>WINDOW (seconds)</label><input id="windows" value="3600"></div>
+      </div>
+      <div id="summary" style="margin-top:14px"></div>
+
+      <div id="applybox" class="msg ok" style="display:none">
+        <b>Apply to the running collector</b>
+        <label style="margin-top:6px;display:flex;align-items:center;gap:7px;letter-spacing:0;font-size:11px;color:var(--tx)">
+          <input type="checkbox" id="applynow" checked style="width:auto">
+          Apply immediately — no restart, and interfaces you did not change keep their history
+        </label>
+        <div class="hint" style="margin-top:6px">
+          Leave this unticked to write the file now and apply it at the next restart.
+        </div>
+      </div>
+
+      <div class="msg warn">
+        <b>Where things are written</b>
+        <div class="kv" style="margin-top:6px">
+          <div>Configuration</div><div id="pcfg"><code>-</code></div>
+          <div>Credential</div><div id="pcred"><code>-</code></div>
+          <div>Backend</div><div id="pback">-</div>
+        </div>
+        <div style="margin-top:8px">The passphrases are encrypted at rest and never appear in the configuration file.</div>
+      </div>
+      <div class="row">
+        <button id="btnBack2">Back</button>
+        <span class="sp"></span>
+        <button id="btnSave" class="go">Verify and save</button>
+      </div>
+      <div id="msg3"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+"use strict";
+
+// Must match the dashboard palette so setup previews the real colours.
+const PALETTE = ['#4FC3F7','#FFB300','#AB47BC','#66BB6A','#EC407A','#9CCC65','#5C6BC0','#FF7043'];
+const $ = id => document.getElementById(id);
+
+let STATE = null, RESULT = null;
+let ROWS = [], ZONES = [], zoneSeq = 0;
+let CURRENT = new Set();     // interface ids in the configuration in force
+const FILTER = {phys:true, tun:true, noHC:false, down:false, q:''};
+
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function slug(s){ return String(s).replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'') || 'x'; }
+function note(el, kind, title, body){
+  el.innerHTML = body
+    ? '<div class="msg '+kind+'"><b>'+esc(title)+'</b>'+esc(body)+'</div>'
+    : '<div class="msg '+kind+'">'+esc(title)+'</div>';
+}
+function step(n){
+  [1,2,3].forEach(i => {
+    $('sec'+i).classList.toggle('hide', i !== n);
+    $('st'+i).className = i === n ? 'on' : (i < n ? 'done' : '');
+  });
+  window.scrollTo(0,0);
+}
+function session(){
+  return {
+    host: $('host').value.trim(),
+    port: parseInt($('port').value,10) || 161,
+    username: $('user').value.trim(),
+    security_level: $('level').value,
+    auth_protocol: $('auth').value,
+    priv_protocol: $('priv').value,
+    auth_pass: $('apass').value,
+    priv_pass: $('ppass').value,
+    vpn_base_oid: ($('vbase').value || '').trim(),
+    use_stored: !!($('usestored') && $('usestored').checked && $('apass').value === ''),
+    timeout_ms: 3000
+  };
+}
+
+/* ---------------- boot ---------------- */
+(async function boot(){
+  try {
+    STATE = await (await fetch('api/setup/state')).json();
+  } catch(e){
+    note($('msg1'), 'err', 'Cannot reach the setup service', String(e));
+    return;
+  }
+  $('backend').textContent = 'credential store: ' + STATE.credential_backend;
+  $('pcfg').innerHTML  = '<code>'+esc(STATE.config_path)+'</code>';
+  $('pcred').innerHTML = '<code>'+esc(STATE.credential_path)+'</code>';
+  $('pback').textContent = STATE.credential_backend;
+
+  // When the collector is running, this is a reconfiguration rather than a
+  // first-time setup: say so, offer a way back, and enable live apply.
+  if (STATE.live){
+    $('livetag').style.display = '';
+    $('back').style.display = '';
+    $('applybox').style.display = '';
+    $('sub1').textContent =
+      'reconfiguring a running collector (generation ' + (STATE.generation || '?') + ') — monitoring continues while you edit';
+  }
+
+  const c = STATE.config;
+  if (STATE.credential_stored){
+    $('storedbox').style.display = 'block';
+    $('storedtxt').textContent =
+      'username "' + (STATE.username || '?') + '" held in ' + STATE.credential_backend + '.';
+    if (STATE.username) $('user').value = STATE.username;
+  }
+  if (c){
+    if (c.host) $('host').value = c.host;
+    if (c.port) $('port').value = c.port;
+    if (c.security_level) $('level').value = c.security_level;
+    if (c.auth_protocol) $('auth').value = c.auth_protocol;
+    if (c.priv_protocol) $('priv').value = c.priv_protocol;
+    if (c.poll_interval_ms) $('pollms').value = c.poll_interval_ms;
+    if (c.window_seconds) $('windows').value = c.window_seconds;
+    if (c.vpn_base_oid) $('vbase').value = c.vpn_base_oid;
+    (c.zones || []).forEach(z => (z.interfaces || []).forEach(i => CURRENT.add(i.id)));
+  }
+  if (!$('vbase').value) $('vbase').value = '1.3.6.1.4.1.12356.101.12.2.2.1';
+
+  if (STATE.live && STATE.credential_stored && c && c.host){
+    $('btnWalk').textContent = 'Walk device and edit selection';
+  }
+})();
+
+/* ---------------- step 1: walk ---------------- */
+$('btnWalk').onclick = async function(){
+  const s = session();
+  if (!s.host){ note($('msg1'), 'err', 'Enter the device address.'); return; }
+  this.disabled = true;
+  note($('msg1'), 'warn', 'Walking ' + s.host + '\u2026',
+    'Reading the interface table and the IPsec tunnel table. This can take a few seconds.'
+    + (STATE.live ? ' Monitoring continues while this runs.' : ''));
+  try {
+    const r = await (await fetch('api/setup/discover', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(s)
+    })).json();
+    if (!r.ok){ note($('msg1'), 'err', r.error || 'Discovery failed', r.hint || ''); return; }
+    RESULT = r.result;
+    buildRows();
+    seedZones();
+    renderZones();
+    renderTable();
+    step(2);
+  } catch(e){
+    note($('msg1'), 'err', 'Request failed', String(e));
+  } finally {
+    this.disabled = false;
+  }
+};
+
+function buildRows(){
+  ROWS = [];
+  (RESULT.interfaces || []).forEach(f => ROWS.push({
+    key: 'if_' + slug(f.name), kind:'phys', match:f.name, index:f.if_index,
+    label:f.alias || '', note:f.alias || f.reason, typeName:f.type_name,
+    up:f.up, hasCtr:f.has_hc_counters, speed:f.speed_mbps || 0,
+    preferred:f.suggested, zone:null
+  }));
+  (RESULT.tunnels || []).forEach(t => ROWS.push({
+    key: 'vpn_' + slug(t.name), kind:'tunnel', match:t.name, index:t.index,
+    label:'', note:'ipsec phase-2 \u00b7 in ' + t.in_octets + ' / out ' + t.out_octets,
+    typeName:'ipsec', up:t.up, hasCtr:true, speed:0, preferred:t.up, zone:null
+  }));
+
+  const v = RESULT.vpn_columns || {};
+  $('vbase').value = v.base_oid || '1.3.6.1.4.1.12356.101.12.2.2.1';
+  $('vname').value = v.col_phase2_name || '';
+  $('vin').value   = v.col_in_octets || '';
+  $('vout').value  = v.col_out_octets || '';
+  $('vstat').value = v.col_status || '';
+  $('vup').value   = v.status_up_value || 2;
+
+  $('devname').textContent =
+    (RESULT.identity.sys_name || 'device') + ' \u00b7 ' + (RESULT.identity.sys_descr || '').slice(0,70);
+
+  if (!RESULT.tunnels || !RESULT.tunnels.length){
+    note($('vpnmsg'), 'warn', 'No IPsec phase-2 entries found',
+      (v.notes || 'The tunnel table is empty, or the base OID differs on this FortiOS build.'));
+  } else {
+    note($('vpnmsg'), v.confident ? 'ok' : 'warn',
+      v.confident ? 'Tunnel table columns detected automatically' : 'Tunnel table columns only partly detected',
+      (v.notes || '') + ' \u2014 SNMP does not report a tunnel capacity, so enter one if you want a utilisation bar.');
+  }
+}
+
+/* ---------------- zones ---------------- */
+function newZone(name, subtitle, id){
+  const z = {
+    id: id || ('z' + (++zoneSeq)),
+    name: name || ('Zone ' + zoneSeq),
+    subtitle: subtitle || '',
+    color: PALETTE[(ZONES.length) % PALETTE.length]
+  };
+  ZONES.push(z);
+  return z;
+}
+
+// Pre-seed from the configuration in force, so reconfiguring is editing rather
+// than starting over. Zone ids are preserved, which keeps the dashboard's
+// per-zone layout stable across the change.
+function seedZones(){
+  ZONES = []; zoneSeq = 0;
+  const prev = STATE && STATE.config && STATE.config.zones;
+  if (prev && prev.length){
+    prev.forEach(pz => {
+      const n = parseInt(String(pz.id).replace(/\D/g,''),10);
+      if (!isNaN(n) && n > zoneSeq) zoneSeq = n;
+      const z = newZone(pz.name || pz.id, pz.subtitle || '', pz.id);
+      (pz.interfaces || []).forEach(pi => {
+        const row = ROWS.find(r => r.match === pi.match && r.kind === pi.kind);
+        if (row){
+          row.zone = z.id;
+          if (pi.speed_mbps) row.speed = pi.speed_mbps;
+          if (pi.label) row.label = pi.label;
+        }
+      });
+    });
+    return;
+  }
+  newZone('WAN', '');
+  newZone('IPsec', '');
+}
+
+function renderZones(){
+  $('zoneList').innerHTML = ZONES.map(z => {
+    const n = ROWS.filter(r => r.zone === z.id).length;
+    return '<div class="zrow" data-z="'+z.id+'">'
+      + '<span class="zdot" style="background:'+z.color+'"></span>'
+      + '<input class="zn" value="'+esc(z.name)+'" placeholder="zone name">'
+      + '<input class="zs" value="'+esc(z.subtitle)+'" placeholder="optional subtitle shown under the zone name">'
+      + '<span class="zcount">'+n+' selected</span>'
+      + '<button class="sm danger rm" type="button">remove</button></div>';
+  }).join('');
+
+  $('zoneList').querySelectorAll('.zrow').forEach(row => {
+    const id = row.dataset.z;
+    const z = ZONES.find(x => x.id === id);
+    row.querySelector('.zn').oninput = e => { z.name = e.target.value; renderTable(); };
+    row.querySelector('.zs').oninput = e => { z.subtitle = e.target.value; };
+    row.querySelector('.rm').onclick = () => {
+      // Interfaces in a removed zone fall back to unassigned rather than
+      // vanishing silently.
+      ROWS.forEach(r => { if (r.zone === id) r.zone = null; });
+      ZONES = ZONES.filter(x => x.id !== id);
+      renderZones(); renderTable();
+    };
+  });
+}
+
+$('addZone').onclick = () => { newZone(); renderZones(); renderTable(); };
+
+/* ---------------- interface table ---------------- */
+function visibleRows(){
+  const q = FILTER.q.toLowerCase();
+  return ROWS.filter(r => {
+    if (r.kind === 'phys' && !FILTER.phys) return false;
+    if (r.kind === 'tunnel' && !FILTER.tun) return false;
+    if (!r.hasCtr && !FILTER.noHC && r.zone === null) return false;
+    if (!r.up && !FILTER.down && r.zone === null) return false;
+    if (q && !(r.match.toLowerCase().includes(q) || (r.note||'').toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+
+function renderTable(){
+  const opts = z => ZONES.map(x =>
+    '<option value="'+x.id+'"'+(z === x.id ? ' selected' : '')+'>'+esc(x.name)+'</option>').join('');
+
+  const rows = visibleRows();
+  $('tAll').querySelector('tbody').innerHTML = rows.map(r =>
+    '<tr data-key="'+r.key+'" class="'+(r.zone ? 'assigned' : '')+' '+(r.up ? '' : 'dim')+'">'
+    + '<td><select class="zsel '+(r.zone ? '' : 'none')+'">'
+    + '<option value="">— not monitored —</option>'+opts(r.zone)+'</select></td>'
+    + '<td>'+r.index+'</td>'
+    + '<td>'+esc(r.match)+(CURRENT.has(r.key) ? ' <span class="pill now">monitored</span>' : '')+'</td>'
+    + '<td style="color:var(--dim)">'+esc(r.note)+'</td>'
+    + '<td><span class="pill '+(r.kind === 'tunnel' ? 'tun' : '')+'">'+esc(r.typeName)+'</span></td>'
+    + '<td><span class="pill '+(r.up ? 'up' : 'down')+'">'+(r.up ? 'up' : 'down')+'</span></td>'
+    + '<td>'+(r.hasCtr
+        ? (r.kind === 'tunnel' ? '<span class="pill">32-bit</span>' : '<span class="pill hc">64-bit</span>')
+        : '<span class="pill">none</span>')+'</td>'
+    + '<td><input class="cap" value="'+(r.speed || '')+'" placeholder="'+(r.kind === 'tunnel' ? 'declare' : 'auto')+'"></td>'
+    + '</tr>').join('');
+
+  $('tAll').querySelector('tbody').querySelectorAll('tr').forEach(tr => {
+    const r = ROWS.find(x => x.key === tr.dataset.key);
+    tr.querySelector('.zsel').onchange = e => {
+      r.zone = e.target.value || null;
+      renderZones(); renderTable();
+    };
+    tr.querySelector('.cap').oninput = e => { r.speed = parseInt(e.target.value,10) || 0; };
+  });
+
+  const assigned = ROWS.filter(r => r.zone).length;
+  const hidden = ROWS.length - rows.length;
+  $('cnt1').textContent =
+    assigned + ' interface(s) assigned across ' + ZONES.length + ' zone(s) · '
+    + rows.length + ' shown, ' + hidden + ' hidden by filters · ' + ROWS.length
+    + ' reported by the device. Anything assigned to a zone stays visible regardless of filters.';
+
+  renderDiff();
+}
+
+// Show what this edit will actually change, so applying it to a live collector
+// is not a leap of faith.
+function renderDiff(){
+  if (!CURRENT.size){ $('diff').innerHTML = ''; return; }
+  const next = new Set(ROWS.filter(r => r.zone).map(r => r.key));
+  const added = [...next].filter(k => !CURRENT.has(k));
+  const removed = [...CURRENT].filter(k => !next.has(k));
+  const kept = [...next].filter(k => CURRENT.has(k));
+  const nameOf = k => { const r = ROWS.find(x => x.key === k); return r ? r.match : k; };
+
+  $('diff').innerHTML =
+    '<span class="add">+ ' + added.length + ' added' + (added.length ? ': ' + added.map(nameOf).join(', ') : '') + '</span>'
+    + '<span class="rem">\u2212 ' + removed.length + ' removed' + (removed.length ? ': ' + removed.map(nameOf).join(', ') : '') + '</span>'
+    + '<span class="same">' + kept.length + ' unchanged (history preserved)</span>';
+}
+
+function bindFilter(btnId, key){
+  $(btnId).onclick = function(){
+    FILTER[key] = !FILTER[key];
+    this.classList.toggle('on', FILTER[key]);
+    renderTable();
+  };
+}
+bindFilter('fPhys','phys');
+bindFilter('fTun','tun');
+bindFilter('fNoHC','noHC');
+bindFilter('fDown','down');
+$('q').oninput = e => { FILTER.q = e.target.value.trim(); renderTable(); };
+$('clearAll').onclick = () => { ROWS.forEach(r => r.zone = null); renderZones(); renderTable(); };
+$('revert').onclick = () => { seedZones(); renderZones(); renderTable(); };
+
+/* ---------------- assemble config ---------------- */
+function collectZones(){
+  const out = [];
+  ZONES.forEach(z => {
+    const members = ROWS.filter(r => r.zone === z.id);
+    if (!members.length) return;           // empty zones are simply not written
+    out.push({
+      id: z.id,
+      name: z.name || z.id,
+      subtitle: z.subtitle || describeZone(members),
+      interfaces: members.map((r, i) => ({
+        id: r.key, match: r.match, label: r.label || '', kind: r.kind,
+        speed_mbps: r.speed || 0, color: PALETTE[i % PALETTE.length]
+      }))
+    });
+  });
+  return out;
+}
+
+function describeZone(members){
+  const p = members.filter(m => m.kind === 'phys').length;
+  const t = members.length - p;
+  const bits = [];
+  if (p) bits.push(p + ' interface' + (p > 1 ? 's' : ''));
+  if (t) bits.push(t + ' tunnel' + (t > 1 ? 's' : ''));
+  return bits.join(' + ');
+}
+
+$('btnNext').onclick = function(){
+  const zones = collectZones();
+  if (!zones.length){
+    note($('vpnmsg'), 'err', 'Assign at least one interface to a zone.');
+    return;
+  }
+  const empty = ZONES.length - zones.length;
+  const lines = zones.map(z =>
+    '<div style="margin-bottom:4px"><b style="color:var(--tx)">'+esc(z.name)+'</b> '
+    + '<span style="color:var(--dim)">('+esc(z.subtitle)+')</span><br>'
+    + '<span style="color:var(--mut)">'+z.interfaces.map(i => esc(i.match)).join(', ')+'</span></div>');
+  const total = zones.reduce((n,z) => n + z.interfaces.length, 0);
+  $('summary').innerHTML =
+    '<div class="msg ok"><b>'+zones.length+' zone(s), '+total+' interface(s)</b>'+lines.join('')
+    + '<div style="margin-top:6px;color:var(--mut)">Polled every '+esc($('pollms').value)+' ms.'
+    + (empty > 0 ? ' ' + empty + ' empty zone(s) will not be written.' : '') + '</div></div>';
+  step(3);
+};
+
+$('btnBack').onclick  = () => step(1);
+$('btnBack2').onclick = () => step(2);
+
+/* ---------------- save ---------------- */
+$('btnSave').onclick = async function(){
+  const zones = collectZones();
+  const apply = !!($('applynow') && $('applynow').checked && STATE.live);
+  const body = {
+    session: session(),
+    zones: zones,
+    apply: apply,
+    poll_interval_ms: parseInt($('pollms').value,10) || 5000,
+    window_seconds: parseInt($('windows').value,10) || 3600,
+    vpn_table: {
+      enabled: zones.some(z => z.interfaces.some(i => i.kind === 'tunnel')),
+      base_oid: $('vbase').value.trim(),
+      col_phase2_name: parseInt($('vname').value,10) || 0,
+      col_in_octets: parseInt($('vin').value,10) || 0,
+      col_out_octets: parseInt($('vout').value,10) || 0,
+      col_status: parseInt($('vstat').value,10) || 0,
+      status_up_value: parseInt($('vup').value,10) || 2
+    }
+  };
+  this.disabled = true;
+  note($('msg3'), 'warn', 'Verifying credentials against the device\u2026');
+  try {
+    const r = await (await fetch('api/setup/save', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+    })).json();
+    if (!r.ok){ note($('msg3'), 'err', r.error || 'Save failed', r.hint || ''); return; }
+
+    const head = 'Saved \u2014 ' + r.zones + ' zone(s), ' + r.interfaces + ' interface(s)'
+      + (r.applied ? ' \u00b7 applied live (generation ' + r.generation + ')' : '');
+    $('msg3').innerHTML = '<div class="msg ok"><b>'+esc(head)+'</b>'+esc(r.message)
+      + (r.applied ? '<div style="margin-top:8px"><a href="index.html">\u2190 back to the dashboard</a></div>' : '')
+      + '</div>';
+    this.textContent = 'Saved';
+
+    // Refresh what counts as "current" so a second edit in the same session
+    // diffs against reality rather than against the pre-edit state.
+    CURRENT = new Set(zones.flatMap(z => z.interfaces.map(i => i.id)));
+  } catch(e){
+    note($('msg3'), 'err', 'Request failed', String(e));
+  } finally {
+    this.disabled = false;
+  }
+};
+</script>
+</body>
+</html>

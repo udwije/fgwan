@@ -1,0 +1,34 @@
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Format check
+        shell: pwsh
+        run: |
+          $files = gofmt -l .
+          if ($files) { $files; throw 'Run gofmt on the files listed above.' }
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Build Windows AMD64
+        shell: pwsh
+        run: .\build.ps1 -Arch amd64 -Version dev -SkipTests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fgwan-windows-amd64
+          path: dist/amd64/fgwan.exe
+          if-no-files-found: error

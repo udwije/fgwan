@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate tag and VERSION
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "VERSION must use MAJOR.MINOR.PATCH. Found: $version"
+          }
+
+          if ('${{ github.event_name }}' -eq 'push') {
+            $tag = '${{ github.ref_name }}'
+          } else {
+            $tag = "v$version"
+          }
+
+          if ($tag -ne "v$version") {
+            throw "Tag $tag does not match VERSION $version. Expected v$version."
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Verify formatting
+        shell: pwsh
+        run: |
+          $files = gofmt -l .
+          if ($files) {
+            $files
+            throw 'Run gofmt on the files listed above.'
+          }
+
+      - name: Vet and test
+        shell: pwsh
+        run: |
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { throw 'go vet failed' }
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { throw 'go test failed' }
+
+      - name: Build deployment package
+        shell: pwsh
+        run: |
+          .\deploy\Package-Fgwan.ps1 `
+            -Version '${{ steps.version.outputs.version }}' `
+            -Arch amd64
+
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $assets = @(
+            "dist\amd64\fgwan.exe",
+            "dist\fgwan-$version-amd64-deploy.zip"
+          )
+          $lines = foreach ($asset in $assets) {
+            $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $([IO.Path]::GetFileName($asset))"
+          }
+          $lines | Set-Content -Encoding ascii "dist\SHA256SUMS.txt"
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $tag = '${{ steps.version.outputs.tag }}'
+          $assets = @(
+            "dist\fgwan-$version-amd64-deploy.zip",
+            "dist\amd64\fgwan.exe",
+            "dist\SHA256SUMS.txt"
+          )
+
+          gh release create $tag @assets `
+            --title "fgwan $tag" `
+            --generate-notes `
+            --verify-tag

@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fgwan — FortiGate WAN Monitor</title>
+<style>
+  :root{
+    --bg:#0b0d0f; --panel:#111418; --panel2:#0e1115; --line:#1d232b;
+    --tx:#c9d2da; --mut:#8695a3; --dim:#5b6874;
+
+    --axis:#6b7683; --axis-lbl:#a9b7c4; --axis-zero:#93a1af; --grid:#222a33;
+    --dn:#4FC3F7; --up:#FFB300;
+    --ok:#5cb372; --warn:#d9a13f; --err:#e05c52;
+    --aggregate:#9fb0c0; --cursor:#7d8b99; --dot-outline:#0b0d0f;
+    --capline:#ef5350; --capfill:rgba(239,83,80,.08); --shadow:rgba(0,0,0,.30);
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    --big:1;
+  }
+  *{box-sizing:border-box}
+  :root[data-theme="light"]{
+    --bg:#eef3f7;--panel:#fff;--panel2:#f7f9fb;--line:#cbd5df;
+    --tx:#17222d;--mut:#536577;--dim:#71808f;--axis:#657687;
+    --axis-lbl:#34495c;--axis-zero:#53687a;--grid:#d8e0e8;
+    --dn:#0077b6;--up:#b56a00;--ok:#287a43;--warn:#9b6500;--err:#b3261e;
+    --aggregate:#596b7d;--cursor:#465d70;--dot-outline:#fff;
+    --capline:#c62828;--capfill:rgba(198,40,40,.07);--shadow:rgba(31,45,61,.14);
+  }
+
+  /* Plain block layout throughout.
+     The previous build sized the chart with nested flex, and an absolutely
+     positioned canvas contributes no height, so the box could resolve to zero
+     and the chart disappeared. Heights are now measured and assigned in
+     JavaScript - see layoutCharts() - which depends on nothing subtle. */
+  html,body{height:100%;margin:0;padding:0}
+  body{background:var(--bg);color:var(--tx);
+    font:13px/1.45 var(--mono);-webkit-font-smoothing:antialiased;
+    overflow:hidden}
+  a{color:#9ccdec}
+
+  .topbar{display:flex;align-items:center;gap:14px;padding:8px 14px;
+    border-bottom:1px solid var(--line);background:var(--panel2);
+    flex-wrap:nowrap;overflow-x:auto;white-space:nowrap}
+  .topbar::-webkit-scrollbar{height:4px}
+  .topbar::-webkit-scrollbar-thumb{background:#242c35}
+  .brand{font-weight:600;letter-spacing:.14em;font-size:calc(12px * var(--big));flex:none}
+  .brand span{color:var(--mut);font-weight:400}
+
+  .metric{flex:none;display:flex;align-items:baseline;gap:7px;
+    padding-left:14px;border-left:1px solid var(--line)}
+  .metric label{color:var(--mut);font-size:calc(9px * var(--big));
+    letter-spacing:.14em;flex:none}
+  .metric .val{font-size:calc(24px * var(--big));line-height:1;font-weight:600;
+    letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .metric .val u{font-size:calc(11px * var(--big));font-weight:400;
+    color:var(--mut);text-decoration:none;margin-left:3px}
+  .metric.dn .val{color:var(--dn)} .metric.up .val{color:var(--up)}
+  .metric .val.sm{font-size:calc(15px * var(--big));color:var(--tx)}
+  .arrow{font-size:calc(13px * var(--big));font-weight:700}
+  .arrow.dn{color:var(--dn)} .arrow.up{color:var(--up)}
+
+  .trend{font-size:calc(10px * var(--big));letter-spacing:0}
+  .trend.rise{color:#6fc186} .trend.fall{color:#d98fa8} .trend.flat{color:var(--dim)}
+
+  .meta{flex:none;display:flex;gap:13px;color:var(--mut);
+    font-size:calc(11px * var(--big));padding-left:14px;border-left:1px solid var(--line)}
+  .meta b{color:var(--tx);font-weight:500}
+  .push{flex:1 0 12px}
+  .ctl{flex:none;display:flex;gap:5px;align-items:center}
+  button,.btn{background:#161a20;border:1px solid var(--line);color:var(--tx);
+    font:11px/1 var(--mono);padding:6px 10px;cursor:pointer;letter-spacing:.06em;
+    text-decoration:none;display:inline-block}
+  button:hover,.btn:hover{border-color:#39434f;background:#1a1f26}
+  button.on{border-color:#4b7a9c;color:#9ccdec;background:#131c24}
+  .btn.cfg{border-color:#3d5240;color:#8fd0a0}
+
+  .bar-note{padding:5px 14px;font-size:11px;letter-spacing:.05em;display:none}
+  .bar-note.sim{display:block;background:#17130c;border-bottom:1px solid #2e2415;color:#d9a13f}
+  .bar-note.err{display:block;background:#1a1010;border-bottom:1px solid #35191a;color:#d99a94}
+  .bar-note.ok{display:block;background:#0f1711;border-bottom:1px solid #26402e;color:#8fd0a0}
+
+  main{padding:10px 12px;overflow-y:auto;overflow-x:hidden}
+  section{border:1px solid var(--line);background:var(--panel);margin-bottom:10px}
+  section:last-child{margin-bottom:0}
+
+  .zhead{display:flex;align-items:center;gap:14px;
+    padding:calc(6px * var(--big)) 12px;
+    border-bottom:1px solid var(--line);background:var(--panel2);
+    flex-wrap:nowrap;overflow-x:auto;white-space:nowrap}
+  .zname{font-size:calc(13px * var(--big));letter-spacing:.1em;font-weight:600;flex:none}
+  .zsub{color:var(--mut);font-size:calc(10px * var(--big));flex:none}
+  .znow{margin-left:auto;display:flex;gap:18px;align-items:baseline;flex:none}
+  .znow div{display:flex;align-items:baseline;gap:5px}
+  .znow label{color:var(--mut);font-size:calc(9px * var(--big));letter-spacing:.14em}
+  .znow b{font-size:calc(21px * var(--big));line-height:1;font-weight:600;
+    font-variant-numeric:tabular-nums}
+  .znow b u{font-size:calc(10px * var(--big));font-weight:400;color:var(--mut);
+    text-decoration:none;margin-left:3px}
+  .znow .dn b{color:var(--dn)} .znow .up b{color:var(--up)}
+
+  .tiles{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);
+    gap:1px;background:var(--line);border-bottom:1px solid var(--line);overflow-x:auto}
+  .tiles::-webkit-scrollbar{height:4px}
+  .tiles::-webkit-scrollbar-thumb{background:#242c35}
+  .tile{background:var(--panel);padding:calc(6px * var(--big)) 10px;
+    border-left:3px solid transparent;min-width:0}
+
+  .t1{display:flex;align-items:baseline;gap:6px;min-width:0}
+  .alias{font-size:calc(13px * var(--big));font-weight:600;letter-spacing:.02em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;
+    direction:rtl;text-align:left}
+  .port{color:var(--dim);font-size:calc(9px * var(--big));letter-spacing:.06em;
+    flex:none;margin-left:auto}
+  .dot{width:calc(7px * var(--big));height:calc(7px * var(--big));border-radius:50%;flex:none}
+
+  .rates{display:flex;gap:calc(14px * var(--big));align-items:baseline;
+    margin-top:calc(3px * var(--big));min-width:0}
+  .rate{display:flex;align-items:baseline;gap:4px;min-width:0}
+  .rate i{font-style:normal;font-size:calc(11px * var(--big));font-weight:700;flex:none}
+  .rate .n{font-size:calc(20px * var(--big));line-height:1;font-weight:600;
+    letter-spacing:-.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rate .n u{font-size:calc(9px * var(--big));font-weight:400;color:var(--mut);
+    text-decoration:none;margin-left:2px}
+  .rate.dn i,.rate.dn .n{color:var(--dn)}
+  .rate.up i,.rate.up .n{color:var(--up)}
+  .tile.down .rate .n{color:var(--err);font-size:calc(15px * var(--big))}
+  .tile.down .rate i{color:var(--err)}
+
+  .ubar{height:calc(3px * var(--big));background:#1c222a;
+    margin-top:calc(5px * var(--big));position:relative;overflow:hidden}
+  .ubar i{position:absolute;left:0;top:0;bottom:0;display:block;transition:width .4s ease}
+  .cap{color:var(--dim);font-size:calc(9px * var(--big));margin-top:3px;
+    letter-spacing:.04em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tile.down{opacity:.72}
+
+  /* The canvas is a plain block and its height is assigned in pixels by
+     layoutCharts(). Nothing here participates in any height negotiation. */
+  .chartwrap{padding:6px 8px 2px}
+  canvas{display:block;width:100%;cursor:crosshair}
+
+  .legend{display:flex;gap:6px;flex-wrap:wrap;padding:5px 10px 8px}
+  .lg{display:flex;align-items:center;gap:6px;cursor:pointer;
+    padding:calc(3px * var(--big)) calc(8px * var(--big));
+    border:1px solid var(--line);background:#141920;
+    font-size:calc(10px * var(--big));color:var(--tx);user-select:none;max-width:320px}
+  .lg:hover{border-color:#39434f}
+  .lg.off{opacity:.35}
+  .lg .sw{width:calc(16px * var(--big));height:calc(3px * var(--big));flex:none;border-radius:1px}
+  .lg .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    direction:rtl;text-align:left}
+  .lg .lv{color:var(--mut);font-variant-numeric:tabular-nums;flex:none}
+  .lghint{margin-left:auto;color:var(--dim);font-size:calc(9px * var(--big));
+    align-self:center;letter-spacing:.06em}
+
+  footer{display:flex;gap:18px;padding:7px 14px;
+    border-top:1px solid var(--line);color:var(--dim);font-size:10px;
+    background:var(--panel2);flex-wrap:wrap}
+  footer b{color:var(--mut);font-weight:400}
+
+  /* Wall mode drops what you only read at a desk. layoutCharts() measures
+     whatever is left, so the charts absorb the freed space automatically -
+     there is no second set of numbers to keep in step. */
+  body.wall .lghint,
+  body.wall .legend,
+  body.wall footer,
+  body.wall .port,
+  body.wall .meta{display:none}
+  body.wall .tile{padding:calc(8px * var(--big)) 12px}
+  body.wall main{padding:12px 14px}
+
+  #tip{position:fixed;pointer-events:none;background:#0d1015;border:1px solid #39434f;
+    padding:8px 10px;font-size:11px;z-index:20;display:none;min-width:240px;
+    box-shadow:0 8px 26px rgba(0,0,0,.7)}
+  #tip .tt{color:var(--mut);margin-bottom:6px;font-size:10px;letter-spacing:.06em;
+    border-bottom:1px solid #222a33;padding-bottom:4px}
+  #tip table{border-collapse:collapse;width:100%}
+  #tip td{padding:1px 0}
+  #tip td.n{padding-right:12px}
+  #tip td.v{text-align:right;color:var(--dn);font-variant-numeric:tabular-nums}
+  #tip td.d{text-align:right;color:var(--up);padding-left:10px;font-variant-numeric:tabular-nums}
+  #tip .csw{width:9px;height:9px;display:inline-block;border-radius:2px;margin-right:5px}
+
+  /* NOC dashboard polish */
+  section{border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:0 10px 28px var(--shadow);overflow:hidden}
+  .zhead{padding:10px 14px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel2))}
+  .zname{font-size:calc(18px * var(--big));font-weight:700;letter-spacing:-.025em}
+  .zsub{font-size:calc(11px * var(--big));color:var(--mut)}
+  .chartwrap{margin:0 10px}
+  .tiles{grid-auto-flow:row;grid-template-columns:1fr;overflow:visible;border-top:1px solid var(--line)}
+  .tile{display:grid;grid-template-columns:minmax(220px,1.8fr) minmax(250px,1fr) minmax(185px,.8fr);align-items:center;gap:14px;padding:7px 14px;border:0;border-left:4px solid transparent;border-bottom:1px solid var(--line);background:var(--panel)}
+  .tile:last-child{border-bottom:0}.tile:hover{background:var(--panel2)}
+  .tile .t1{min-width:0}.tile .rates{display:flex;justify-content:flex-start;gap:22px}.tile .rate{display:flex;align-items:baseline;gap:6px}
+  .tile .rate .n{font-size:calc(15px * var(--big));font-weight:700}.tile .ubar{grid-column:3;height:7px}.tile .cap{grid-column:3;font-size:calc(10px * var(--big));text-align:right}
+  .zonecap{display:inline-flex;align-items:center;gap:6px;margin-left:8px;padding:2px 8px;border:1px solid var(--line);border-radius:999px;color:var(--axis-lbl);font-size:calc(10px * var(--big));font-weight:600}
+  .cap-badge{color:var(--capline);font-weight:700}
+  @media(max-width:900px){.tile{grid-template-columns:1fr 1fr}.tile .ubar,.tile .cap{grid-column:1/-1}.tile .cap{text-align:left}}
+
+</style>
+</head>
+<body>
+
+<div class="topbar" id="topbar">
+  <div class="brand">FGWAN <span>/ bandwidth</span></div>
+
+  <div class="metric dn">
+    <span class="arrow dn">&#9660;</span>
+    <label>DOWNLOAD</label>
+    <div class="val" id="g-dn">—</div>
+    <span class="trend" id="g-dn-tr"></span>
+  </div>
+  <div class="metric up">
+    <span class="arrow up">&#9650;</span>
+    <label>UPLOAD</label>
+    <div class="val" id="g-up">—</div>
+  </div>
+  <div class="metric"><label>PEAK</label><div class="val sm" id="g-peak">—</div></div>
+  <div class="metric"><label>AVG</label><div class="val sm" id="g-avg">—</div></div>
+  <div class="metric"><label>STATE</label><div class="val sm" id="g-state">—</div></div>
+
+  <div class="meta">
+    <div>host <b id="h-host">—</b></div>
+    <div>poll <b id="h-poll">—</b></div>
+    <div>last <b id="h-age">—</b></div>
+    <div>link <b id="h-link">…</b></div>
+  </div>
+
+  <div class="push"></div>
+  <div class="ctl">
+    <button id="w15">15m</button>
+    <button id="w60" class="on">60m</button>
+    <button id="bagg" class="on">total</button>
+    <button id="bsmooth">smooth</button>
+    <button id="btheme" title="Switch light/dark theme">light</button>
+    <button id="bbig">wall</button>
+    <button id="bpause">pause</button>
+    <a class="btn cfg" id="bcfg" href="setup.html" style="display:none">configure</a>
+  </div>
+</div>
+
+<div class="bar-note" id="note"></div>
+<main id="zones"></main>
+
+<footer id="footer">
+  <div>ui <b id="f-build">—</b></div>
+  <div>chart <b id="f-chart">—</b></div>
+  <div>samples <b id="f-n">0</b>/<b id="f-cap">0</b></div>
+  <div>config gen <b id="f-gen">—</b></div>
+  <div>index cache <b id="f-disc">—</b></div>
+  <div>snmp timeouts <b id="f-to">—</b></div>
+  <div>auth fails <b id="f-af">—</b></div>
+  <div>counter resets <b id="f-rst">—</b></div>
+  <div>poll failures <b id="f-pf">—</b></div>
+  <div>ws clients <b id="f-ws">—</b></div>
+  <div id="f-err" style="color:#c07a74"></div>
+</footer>
+
+<div id="tip"></div>
+
+<script>
+"use strict";
+
+// Shown in the footer so you can confirm at a glance which UI is actually
+// being served - the page is embedded in the binary, so a stale copy is
+// indistinguishable from a broken fix without this.
+const UI_BUILD = 'layout-4-noc';
+
+function cssv(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+const PALETTE = [cssv('--dn'),cssv('--up'),'#AB47BC','#66BB6A','#EC407A','#9CCC65','#5C6BC0','#FF7043'];
+const DASHES = [[], [7,3], [2,3], [10,3,2,3]];
+
+const DOWN_ARROW = '\u25bc';
+const UP_ARROW   = '\u25b2';
+
+// Below this a chart cannot carry axes and labels legibly. If the window
+// cannot give every zone this much, main scrolls instead of crushing them.
+const MIN_CHART_H = 150;
+
+let META = null, IFACES = [], ZONES = [];
+let TS = [], BUF = {}, CAPN = 720, POLL = 5000;
+let WIN = 720, AGG = true, PAUSED = false, CUR = -1, BIG = false, SMOOTH = false;
+let MUTED = {}, HOVER = null;
+let lastFrameAt = 0;
+let GEN = 0;
+let CHART_H = 0;          // px, assigned by layoutCharts()
+
+/* ---------- layout -----------------------------------------------------
+   Everything above and below the charts is measured from the live DOM, so
+   this adapts automatically to wall mode, a visible warning banner, a
+   wrapped top strip, font scaling, or any future chrome. There are no
+   hard-coded chrome heights to drift out of date. */
+let lastLayoutAt = 0;
+function layoutCharts(force){
+  // render() runs on every mousemove during a crosshair drag, and measuring
+  // forces a reflow, so unforced calls are throttled. Anything that genuinely
+  // changes the chrome passes force=true.
+  const now = Date.now();
+  if (!force && now - lastLayoutAt < 250) return false;
+  lastLayoutAt = now;
+
+  const sections = document.querySelectorAll('#zones section');
+  if (!sections.length) return false;
+
+  const main = document.getElementById('zones');
+  const cs   = getComputedStyle(main);
+  const vh   = document.documentElement.clientHeight;
+
+  const h = el => (el && el.offsetParent !== null) ? el.offsetHeight : 0;
+
+  // Space the charts cannot have.
+  const outside = h(document.getElementById('topbar'))
+                + h(document.getElementById('note'))
+                + h(document.getElementById('footer'))
+                + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+
+  const n = sections.length;
+  const gaps = (n - 1) * 10;                       // section margin-bottom
+  const perSection = Math.floor((vh - outside - gaps) / n);
+
+  // Each section keeps its own header, tiles and legend; the chart takes what
+  // is left of that section's share.
+  let applied = 0, changed = false;
+  sections.forEach(sec => {
+    const wrap = sec.querySelector('.chartwrap');
+    const cv   = sec.querySelector('canvas');
+    if (!wrap || !cv) return;
+
+    const wcs = getComputedStyle(wrap);
+    const chrome = h(sec.querySelector('.zhead'))
+                 + h(sec.querySelector('.tiles'))
+                 + h(sec.querySelector('.legend'))
+                 + parseFloat(wcs.paddingTop) + parseFloat(wcs.paddingBottom)
+                 + 2;                              // section border
+
+    const want = Math.max(MIN_CHART_H, perSection - chrome);
+    if (cv.style.height !== want + 'px'){
+      cv.style.height = want + 'px';
+      changed = true;
+    }
+    applied = want;
+  });
+
+  CHART_H = applied;
+  const f = document.getElementById('f-chart');
+  if (f) f.textContent = applied + 'px';
+
+  // If the charts had to take their floor, the page is taller than the
+  // viewport; let it scroll rather than clipping.
+  const total = outside + gaps + [...sections].reduce((a, s) => a + s.offsetHeight, 0);
+  main.style.height = (vh - outside + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) + 'px';
+  main.style.overflowY = (total > vh + 1) ? 'auto' : 'hidden';
+
+  return changed;
+}
+
+/* ---------- naming ----------------------------------------------------- */
+function displayName(f){
+  return (f.alias && f.alias.trim()) || (f.label && f.label.trim()) || f.name;
+}
+function portCaption(f){
+  const d = displayName(f);
+  return d === f.name ? '' : f.name;
+}
+
+// Names like connected_to_LankaCom_ILL and connected_to_SLT_ILL differ only at
+// the END, so clipping the head throws away the one part that identifies them.
+function shortNames(list){
+  const full = list.map(displayName);
+  if (full.length > 1) {
+    let p = full[0];
+    for (const s of full) {
+      let i = 0;
+      while (i < p.length && i < s.length && p[i] === s[i]) i++;
+      p = p.slice(0, i);
+    }
+    const cut = Math.max(p.lastIndexOf('_'), p.lastIndexOf('-'), p.lastIndexOf('.'));
+    if (cut >= 3 && full.every(s => s.length - cut > 3)) {
+      return full.map(s => s.slice(cut + 1));
+    }
+  }
+  return full;
+}
+function clipTail(s, n){
+  return s.length <= n ? s : '\u2026' + s.slice(-(n - 1));
+}
+
+/* ---------- formatting ------------------------------------------------- */
+function split(v){
+  if (v === null || v === undefined || !isFinite(v)) return {n:'—', u:''};
+  if (v >= 1e9) return {n:(v/1e9).toFixed(2), u:'Gbps'};
+  if (v >= 1e6) return {n:(v/1e6).toFixed(v >= 1e8 ? 0 : 1), u:'Mbps'};
+  if (v >= 1e3) return {n:(v/1e3).toFixed(0), u:'kbps'};
+  return {n:v.toFixed(0), u:'bps'};
+}
+function big(v){ const s = split(v); return s.n + '<u>' + s.u + '</u>'; }
+function bps(v){
+  if (v === null || v === undefined || !isFinite(v)) return '—';
+  const s = split(v); return s.n + ' ' + s.u;
+}
+function axisLabel(v){
+  if (v >= 1e9) return (v/1e9).toFixed(v >= 1e10 ? 0 : 1) + 'G';
+  if (v >= 1e6) return (v/1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M';
+  if (v >= 1e3) return (v/1e3).toFixed(0) + 'k';
+  return v.toFixed(0);
+}
+const pad2 = n => String(n).padStart(2,'0');
+function hhmm(t){ const d = new Date(t); return pad2(d.getHours())+':'+pad2(d.getMinutes()); }
+function hhmmss(t){ const d = new Date(t); return hhmm(t)+':'+pad2(d.getSeconds()); }
+
+function trend(series){
+  const back = Math.max(2, Math.round(60000 / POLL));
+  const n = series.length;
+  if (n < back + 1) return null;
+  const now = series[n-1], then = series[n-1-back];
+  if (!now || !then) return null;
+  const a = now.rx + now.tx, b = then.rx + then.tx;
+  if (b <= 0) return null;
+  const pct = (a - b) / b * 100;
+  return isFinite(pct) ? pct : null;
+}
+function trendHTML(pct){
+  if (pct === null) return '';
+  if (Math.abs(pct) < 5) return '<span class="trend flat">steady</span>';
+  const cls = pct > 0 ? 'rise' : 'fall';
+  const arrow = pct > 0 ? '\u25b2' : '\u25bc';
+  return '<span class="trend '+cls+'">'+arrow+' '+Math.abs(pct).toFixed(0)+'%</span>';
+}
+function setNote(kind, text){
+  const n = document.getElementById('note');
+  if (!kind){ n.className = 'bar-note'; n.textContent = ''; }
+  else { n.className = 'bar-note ' + kind; n.innerHTML = text; }
+  // The banner changes how much height is available, so re-measure.
+  layoutCharts(true);
+}
+
+/* ---------- bootstrap -------------------------------------------------- */
+async function loadLayout(){
+  META = await (await fetch('api/interfaces')).json();
+  POLL = META.poll_interval_ms || 5000;
+  CAPN = Math.max(2, Math.floor((META.window_seconds||3600)*1000/POLL));
+  ZONES = META.zones || [];
+  GEN = META.generation || 0;
+
+  const keepWin = (WIN !== CAPN && WIN < CAPN) ? WIN : CAPN;
+  WIN = Math.min(keepWin, CAPN);
+
+  IFACES = [];
+  const fresh = {};
+  ZONES.forEach(z => {
+    const short = shortNames(z.interfaces);
+    z.interfaces.forEach((f, i) => {
+      f.color = PALETTE[i % PALETTE.length];
+      f.dash  = DASHES[Math.floor(i / PALETTE.length) % DASHES.length];
+      f.zoneId = z.id;
+      f.disp  = displayName(f);
+      f.short = short[i];
+      f.port  = portCaption(f);
+      IFACES.push(f);
+      fresh[f.id] = BUF[f.id] || [];
+    });
+  });
+  BUF = fresh;
+  IFACES.forEach(f => {
+    while (BUF[f.id].length > TS.length) BUF[f.id].shift();
+    while (BUF[f.id].length < TS.length) BUF[f.id].unshift(null);
+  });
+
+  document.getElementById('h-host').textContent = META.device || '—';
+  document.getElementById('h-poll').textContent = (POLL/1000)+'s';
+  document.getElementById('f-cap').textContent = CAPN;
+  document.getElementById('f-gen').textContent = GEN;
+  document.getElementById('f-build').textContent = UI_BUILD;
+  document.getElementById('bcfg').style.display = META.setup_enabled ? '' : 'none';
+
+  if (META.simulator){
+    setNote('sim', 'SIMULATOR MODE — synthetic counters, no SNMP session with ' + META.device + '.');
+  } else {
+    const unresolved = IFACES.filter(f => !f.resolved).map(f => f.disp);
+    if (unresolved.length){
+      setNote('err', 'Unresolved on the device: ' + unresolved.join(', ') +
+        ' — open <a href="setup.html">configure</a> to reselect from a fresh walk.');
+    } else {
+      setNote(null);
+    }
+  }
+  buildDOM();
+  layoutCharts(true);
+}
+
+async function boot(){
+  await loadLayout();
+  await backfill();
+  connect();
+  // Measure once the first paint has settled, then draw.
+  requestAnimationFrame(() => { layoutCharts(true); render(); });
+  setInterval(pollHealth, 5000);
+  pollHealth();
+  setInterval(() => {
+    document.getElementById('h-age').textContent =
+      lastFrameAt ? Math.round((Date.now()-lastFrameAt)/1000)+'s' : '—';
+  }, 1000);
+}
+
+async function applyReconfiguration(gen){
+  setNote('ok', 'Configuration updated (generation ' + gen + ') — reloading the layout…');
+  await loadLayout();
+  await backfill();
+  requestAnimationFrame(() => { layoutCharts(true); render(); });
+  setTimeout(() => {
+    if (document.getElementById('note').classList.contains('ok')) setNote(null);
+  }, 6000);
+}
+
+function buildDOM(){
+  const root = document.getElementById('zones');
+  root.innerHTML = ZONES.map(z => `
+    <section>
+      <div class="zhead">
+        <div class="zname">${z.name || z.id}</div>
+        <div class="zsub">${z.subtitle || ''} <span class="zonecap" id="zc-${z.id}">capacity —</span></div>
+        <div class="znow">
+          <div class="dn"><label>${DOWN_ARROW} DOWN</label><b id="zn-${z.id}-dn">—</b></div>
+          <div class="up"><label>${UP_ARROW} UP</label><b id="zn-${z.id}-up">—</b></div>
+        </div>
+      </div>
+      <div class="chartwrap"><canvas id="c-${z.id}"></canvas></div>
+      <div class="tiles" id="tiles-${z.id}">
+        ${z.interfaces.map(f => `
+          <div class="tile" data-id="${f.id}" style="border-left-color:${f.color}"
+               title="${f.disp}${f.port ? ' — ' + f.port : ''}">
+            <div class="t1">
+              <span class="dot" style="background:${f.color}"></span>
+              <span class="alias">${f.disp}</span>
+              <span class="port">${f.port}</span>
+            </div>
+            <div class="rates">
+              <div class="rate dn"><i>${DOWN_ARROW}</i><div class="n v-dn">—</div></div>
+              <div class="rate up"><i>${UP_ARROW}</i><div class="n v-up">—</div></div>
+            </div>
+            <div class="ubar"><i></i></div>
+            <div class="cap"></div>
+          </div>`).join('')}
+      </div>
+      <div class="legend" id="lg-${z.id}">
+        ${z.interfaces.map(f => `
+          <div class="lg" data-id="${f.id}" title="${f.disp}">
+            <span class="sw" style="background:${f.color}"></span>
+            <span class="nm">${f.short}</span><span class="lv" id="lv-${f.id}">—</span>
+          </div>`).join('')}
+        <span class="lghint">${DOWN_ARROW} download above · ${UP_ARROW} upload below · hover to isolate, click to mute</span>
+      </div>
+    </section>`).join('');
+
+  ZONES.forEach(z => {
+    const known = z.interfaces.filter(f => Number(f.speed_mbps) > 0);
+    const totalMbps = known.reduce((n,f) => n + Number(f.speed_mbps), 0);
+    const zc = document.getElementById('zc-'+z.id);
+    if (zc) zc.textContent = totalMbps > 0 ? 'capacity ' + bps(totalMbps*1e6) : 'capacity unknown';
+    const cv = document.getElementById('c-'+z.id);
+    cv.addEventListener('mousemove', e => onMove(e, z));
+    cv.addEventListener('mouseleave', () => {
+      CUR = -1; document.getElementById('tip').style.display='none'; render();
+    });
+    document.getElementById('lg-'+z.id).querySelectorAll('.lg').forEach(el => {
+      const id = el.dataset.id;
+      if (MUTED[id]) el.classList.add('off');
+      el.onmouseenter = () => { HOVER = id; render(); };
+      el.onmouseleave = () => { HOVER = null; render(); };
+      el.onclick = () => {
+        MUTED[id] = !MUTED[id];
+        el.classList.toggle('off', !!MUTED[id]);
+        render();
+      };
+    });
+  });
+}
+
+/* ---------- data ------------------------------------------------------- */
+function ingest(fr){
+  TS.push(fr.ts);
+  IFACES.forEach(f => {
+    if (!BUF[f.id]) BUF[f.id] = [];
+    BUF[f.id].push((fr.v ? fr.v[f.id] : null) || null);
+  });
+  while (TS.length > CAPN){
+    TS.shift();
+    IFACES.forEach(f => BUF[f.id].shift());
+  }
+  lastFrameAt = Date.now();
+}
+
+async function backfill(){
+  try {
+    const r = await (await fetch('api/series')).json();
+    TS = [];
+    IFACES.forEach(f => BUF[f.id] = []);
+    (r.frames || []).forEach(ingest);
+    if (typeof r.generation === 'number') GEN = r.generation;
+  } catch(e){ console.warn('backfill failed', e); }
+}
+
+function connect(){
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(proto + '//' + location.host + '/ws');
+  const link = document.getElementById('h-link');
+  ws.onopen  = () => { link.textContent = 'live'; link.style.color = '#6fc186'; };
+  ws.onmessage = ev => {
+    if (PAUSED) return;
+    let fr; try { fr = JSON.parse(ev.data); } catch(e){ return; }
+    if (!fr || typeof fr.ts !== 'number') return;
+    if (TS.length && fr.ts <= TS[TS.length-1]) return;
+    ingest(fr);
+    render();
+  };
+  ws.onclose = () => {
+    link.textContent = 'retry'; link.style.color = '#d9a13f';
+    setTimeout(connect, 3000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+let reloading = false;
+async function pollHealth(){
+  try {
+    const h = await (await fetch('healthz')).json();
+    const set = (id,v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('f-n',   TS.length);
+    set('f-gen', h.generation !== undefined ? h.generation : '—');
+    set('f-disc', h.index_cache_age_s !== undefined ? Math.round(h.index_cache_age_s)+'s' : 'n/a');
+    set('f-to',  h.snmp_timeouts !== undefined ? h.snmp_timeouts : 'n/a');
+    set('f-af',  h.snmp_auth_fails !== undefined ? h.snmp_auth_fails : 'n/a');
+    set('f-rst', h.counter_resets);
+    set('f-pf',  h.poll_failures);
+    set('f-ws',  h.ws_clients);
+    set('f-err', h.last_error || '');
+
+    if (typeof h.generation === 'number' && h.generation !== GEN && !reloading){
+      reloading = true;
+      try { await applyReconfiguration(h.generation); }
+      finally { reloading = false; }
+    }
+  } catch(e){ /* server briefly unavailable */ }
+}
+
+function stats(id, n){
+  const a = (BUF[id] || []).slice(-n).filter(Boolean);
+  if (!a.length) return null;
+  const s = {rx:a[a.length-1].rx, tx:a[a.length-1].tx, prx:0, ptx:0, mrx:0, mtx:0};
+  a.forEach(p => { s.prx=Math.max(s.prx,p.rx); s.ptx=Math.max(s.ptx,p.tx); s.mrx+=p.rx; s.mtx+=p.tx; });
+  s.mrx/=a.length; s.mtx/=a.length;
+  return s;
+}
+const isUp = f => (BUF[f.id]||[]).length > 0 && BUF[f.id][BUF[f.id].length-1] !== null;
+
+function aggregate(list){
+  const out = [];
+  for (let i=0;i<TS.length;i++){
+    let rx=0, tx=0, any=false;
+    list.forEach(f => { const p = (BUF[f.id]||[])[i]; if (p){ rx+=p.rx; tx+=p.tx; any=true; } });
+    out.push(any ? {rx,tx} : null);
+  }
+  return out;
+}
+
+/* ---------- top strip -------------------------------------------------- */
+function paintTop(){
+  const agg = aggregate(IFACES);
+  const last = agg.length ? agg[agg.length-1] : null;
+  document.getElementById('g-dn').innerHTML = last ? big(last.rx) : '—';
+  document.getElementById('g-up').innerHTML = last ? big(last.tx) : '—';
+  document.getElementById('g-dn-tr').innerHTML = trendHTML(trend(agg));
+
+  const win = agg.slice(-WIN).filter(Boolean);
+  let prx=0, ptx=0, mrx=0, mtx=0;
+  win.forEach(p => { prx=Math.max(prx,p.rx); ptx=Math.max(ptx,p.tx); mrx+=p.rx; mtx+=p.tx; });
+  if (win.length){ mrx/=win.length; mtx/=win.length; }
+  document.getElementById('g-peak').innerHTML = win.length ? big(Math.max(prx,ptx)) : '—';
+  document.getElementById('g-avg').innerHTML  = win.length ? big((mrx+mtx)/2) : '—';
+
+  const down = IFACES.filter(f => !isUp(f));
+  const st = document.getElementById('g-state');
+  if (down.length){
+    st.innerHTML = '<span style="color:var(--err)">' + down.length + ' DOWN</span>';
+    st.title = down.map(f => f.disp).join(', ');
+  } else {
+    st.innerHTML = '<span style="color:var(--ok)">' + IFACES.length + ' UP</span>';
+    st.title = '';
+  }
+}
+
+function paintZoneNow(z){
+  const agg = aggregate(z.interfaces);
+  const last = agg.length ? agg[agg.length-1] : null;
+  const d = document.getElementById('zn-'+z.id+'-dn');
+  const u = document.getElementById('zn-'+z.id+'-up');
+  if (d) d.innerHTML = last ? big(last.rx) : '—';
+  if (u) u.innerHTML = last ? big(last.tx) : '—';
+}
+
+function paintTiles(z){
+  z.interfaces.forEach(f => {
+    const el = document.querySelector('#tiles-'+z.id+' .tile[data-id="'+f.id+'"]');
+    if (!el) return;
+    const s = stats(f.id, WIN), up = isUp(f);
+    el.classList.toggle('down', !up);
+    el.style.borderLeftColor = up ? f.color : 'var(--err)';
+    el.querySelector('.dot').style.background = up ? f.color : 'var(--err)';
+
+    el.querySelector('.v-dn').innerHTML = up && s ? big(s.rx) : 'DOWN';
+    el.querySelector('.v-up').innerHTML = up && s ? big(s.tx) : '';
+
+    const lv = document.getElementById('lv-'+f.id);
+    if (lv) lv.textContent = up && s ? bps(Math.max(s.rx,s.tx)) : 'down';
+
+    const bar = el.querySelector('.ubar i');
+    let u = 0;
+    if (s && up && f.speed_mbps > 0) u = Math.min(100, Math.max(s.rx,s.tx)/(f.speed_mbps*1e6)*100);
+    bar.style.width = (u > 0 ? Math.max(u, 0.8) : 0).toFixed(1)+'%';
+    bar.style.background = u > 85 ? 'var(--err)' : u > 65 ? 'var(--warn)' : f.color;
+
+    let cap;
+    if (!up){
+      cap = f.kind === 'tunnel' ? 'tunnel down' : 'link down';
+    } else if (s){
+      cap = 'peak ' + bps(Math.max(s.prx, s.ptx));
+      if (f.speed_mbps > 0) cap += ' · ' + u.toFixed(u < 10 ? 1 : 0) + '% of ' + f.speed_mbps + 'M';
+    } else {
+      cap = f.resolved ? '' : 'unresolved';
+    }
+    el.querySelector('.cap').textContent = cap;
+  });
+}
+
+/* ---------- chart ------------------------------------------------------ */
+function pads(){
+  const s = BIG ? 1.5 : 1;
+  return {l: Math.round(84*s), r: Math.round(132*s),
+          t: Math.round(20*s), b: Math.round(34*s)};
+}
+const fs = px => Math.round(px * (BIG ? 1.55 : 1));
+
+function alphaFor(id){
+  if (MUTED[id]) return 0.10;
+  if (HOVER && HOVER !== id) return 0.16;
+  return 1;
+}
+function withAlpha(hex, a){
+  if (a >= 1) return hex;
+  return hex + Math.round(a * 255).toString(16).padStart(2,'0');
+}
+
+// A centred moving average, applied to the drawn line only. Every number on
+// the page still comes from raw samples.
+function smoothed(series, k){
+  if (k <= 1) return series;
+  const half = (k - 1) / 2;
+  const out = new Array(series.length);
+  for (let i = 0; i < series.length; i++){
+    if (!series[i]) { out[i] = null; continue; }
+    let rx = 0, tx = 0, n = 0;
+    for (let j = i - half; j <= i + half; j++){
+      const p = series[j];
+      if (j >= 0 && j < series.length && p){ rx += p.rx; tx += p.tx; n++; }
+    }
+    out[i] = n ? {rx: rx/n, tx: tx/n} : null;
+  }
+  return out;
+}
+
+function seriesFor(id){
+  const raw = BUF[id] || [];
+  return SMOOTH ? smoothed(raw, 5) : raw;
+}
+
+function draw(z){
+  const cv = document.getElementById('c-'+z.id);
+  if (!cv) return;
+  const P = pads();
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (w < 60 || h < 40) return;
+
+  cv.width = w*dpr; cv.height = h*dpr;
+  const g = cv.getContext('2d');
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);
+  const font = getComputedStyle(document.body).fontFamily;
+
+  const n = Math.min(WIN, TS.length);
+  if (n < 2){
+    g.fillStyle = '#5b6874'; g.font = fs(12)+'px '+font; g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('waiting for samples…', w/2, h/2);
+    return;
+  }
+  const i0 = TS.length - n;
+  const pw = w - P.l - P.r, ph = h - P.t - P.b, mid = P.t + ph/2;
+  if (pw < 40 || ph < 40) return;
+
+  const active = z.interfaces.filter(f => !MUTED[f.id]);
+  const S = {};
+  z.interfaces.forEach(f => S[f.id] = seriesFor(f.id));
+
+  let mx = 1;
+  active.forEach(f => S[f.id].slice(i0).forEach(p => { if(p) mx = Math.max(mx,p.rx,p.tx); }));
+  if (AGG) for (let i=i0;i<TS.length;i++){
+    let r=0,t=0;
+    active.forEach(f => { const p=S[f.id][i]; if(p){ r+=p.rx; t+=p.tx; } });
+    mx = Math.max(mx,r,t);
+  }
+  // Keep quiet links readable, then anchor the scale to declared capacity
+  // near saturation so a full circuit is visually unmistakable.
+  const knownCaps = active.filter(f => Number(f.speed_mbps) > 0);
+  const cap = AGG
+    ? knownCaps.reduce((sum,f) => sum + Number(f.speed_mbps)*1e6, 0)
+    : knownCaps.reduce((max,f) => Math.max(max, Number(f.speed_mbps)*1e6), 0);
+  const nearCapacity = cap > 0 && mx >= cap * 0.80;
+  const target = nearCapacity ? Math.max(mx,cap) : mx;
+  const pow = Math.pow(10, Math.floor(Math.log10(target)));
+  let top = Math.ceil(target/(pow/2))*(pow/2)*1.06;
+  if (nearCapacity) top = Math.max(top,cap*1.05);
+
+  const X = i => P.l + (i-i0)/(n-1)*pw;
+  const Y = (v,dir) => mid - dir*(v/top)*(ph/2);
+
+  // grid
+  g.lineWidth = 1;
+  g.strokeStyle = cssv('--grid');
+  for (let s=-2;s<=2;s++){
+    if (s === 0) continue;
+    const y = Math.round(mid - s*(ph/2)/2) + 0.5;
+    g.beginPath(); g.moveTo(P.l,y); g.lineTo(w-P.r,y); g.stroke();
+  }
+  const every = Math.max(1, Math.round(n/8));
+  for (let i=i0;i<TS.length;i+=every){
+    const x = Math.round(X(i)) + 0.5;
+    g.beginPath(); g.moveTo(x,P.t); g.lineTo(x,h-P.b); g.stroke();
+  }
+
+  // axis frame, ticks, labels
+  g.strokeStyle = cssv('--axis');
+  const xAxisY = Math.round(h - P.b) + 0.5;
+  const yAxisX = Math.round(P.l) + 0.5;
+  g.beginPath();
+  g.moveTo(yAxisX, P.t); g.lineTo(yAxisX, xAxisY);
+  g.lineTo(w - P.r, xAxisY);
+  g.stroke();
+
+  g.font = fs(12)+'px '+font;
+  g.textBaseline = 'middle';
+  g.textAlign = 'right';
+  for (let s=-2;s<=2;s++){
+    const y = Math.round(mid - s*(ph/2)/2) + 0.5;
+    g.strokeStyle = cssv('--axis');
+    g.beginPath(); g.moveTo(yAxisX - 6, y); g.lineTo(yAxisX, y); g.stroke();
+    g.fillStyle = s === 0 ? cssv('--axis-zero') : cssv('--axis-lbl');
+    g.fillText(s === 0 ? '0' : axisLabel(top*Math.abs(s)/2), P.l - 10, y);
+  }
+
+  g.save();
+  g.translate(fs(14), mid);
+  g.rotate(-Math.PI/2);
+  g.textAlign = 'center';
+  g.fillStyle = cssv('--mut');
+  g.font = fs(11)+'px '+font;
+  g.fillText('bits / second', 0, 0);
+  g.restore();
+
+  g.textAlign = 'left';
+  g.font = '600 '+fs(12)+'px '+font;
+  g.fillStyle = cssv('--dn');
+  g.fillText(DOWN_ARROW + ' DOWNLOAD', fs(28), P.t + fs(10));
+  g.fillStyle = cssv('--up');
+  g.fillText(UP_ARROW + ' UPLOAD', fs(28), h - P.b - fs(10));
+
+  g.font = fs(12)+'px '+font;
+  g.textAlign = 'center';
+  for (let i=i0;i<TS.length;i+=every){
+    const x = Math.round(X(i)) + 0.5;
+    g.strokeStyle = cssv('--axis');
+    g.beginPath(); g.moveTo(x, xAxisY); g.lineTo(x, xAxisY + 6); g.stroke();
+    g.fillStyle = cssv('--axis-lbl');
+    g.fillText(hhmm(TS[i]), x, xAxisY + fs(16));
+  }
+  g.textAlign = 'right';
+  g.fillStyle = cssv('--mut');
+  g.font = fs(11)+'px '+font;
+  g.fillText(Math.round(n*POLL/60000)+' min', w - P.r, xAxisY + fs(16));
+
+  g.strokeStyle = cssv('--axis-zero');
+  g.lineWidth = 1.4;
+  g.beginPath();
+  g.moveTo(P.l, Math.round(mid)+0.5); g.lineTo(w-P.r, Math.round(mid)+0.5);
+  g.stroke();
+
+  if (nearCapacity){
+    const yDown=Y(cap,1), yUp=Y(cap,-1);
+    g.fillStyle=cssv('--capfill');
+    g.fillRect(P.l,P.t,pw,Math.max(0,yDown-P.t));
+    g.fillRect(P.l,yUp,pw,Math.max(0,h-P.b-yUp));
+    g.strokeStyle=cssv('--capline');g.lineWidth=BIG?2.2:1.5;g.setLineDash([8,5]);
+    [yDown,yUp].forEach(y=>{g.beginPath();g.moveTo(P.l,y);g.lineTo(w-P.r,y);g.stroke();});
+    g.setLineDash([]);g.fillStyle=cssv('--capline');g.font='700 '+fs(11)+'px '+font;g.textAlign='right';
+    g.fillText('CAP '+bps(cap),w-P.r-6,Math.max(P.t+fs(10),yDown-fs(8)));
+  }
+
+  const plot = (get, col, lw, fill, dash, alpha) => {
+    for (const dir of [1,-1]){
+      let run = [];
+      const flush = () => {
+        if (run.length >= 2){
+          if (fill && alpha > 0.5){
+            g.beginPath(); g.moveTo(run[0][0], mid);
+            run.forEach(p => g.lineTo(p[0], Y(dir>0?p[1].rx:p[1].tx, dir)));
+            g.lineTo(run[run.length-1][0], mid); g.closePath();
+            g.fillStyle = col + '22'; g.fill();
+          }
+          g.beginPath();
+          run.forEach((p,j) => {
+            const y = Y(dir>0?p[1].rx:p[1].tx, dir);
+            j ? g.lineTo(p[0],y) : g.moveTo(p[0],y);
+          });
+          g.setLineDash(dash || []);
+          g.strokeStyle = withAlpha(col, alpha);
+          g.lineWidth = lw; g.lineJoin='round'; g.lineCap='round';
+          g.stroke();
+          g.setLineDash([]);
+        }
+        run = [];
+      };
+      for (let i=i0;i<TS.length;i++){
+        const v = get(i);
+        if (v) run.push([X(i), v]); else flush();
+      }
+      flush();
+    }
+  };
+
+  // The zone total is context, so it is drawn first and softly, behind the
+  // individual links.
+  if (AGG && active.length > 1){
+    plot(i => {
+      let r=0,t=0,any=false;
+      active.forEach(f => { const p=S[f.id][i]; if(p){ r+=p.rx; t+=p.tx; any=true; } });
+      return any ? {rx:r,tx:t} : null;
+    }, cssv('--aggregate'), BIG ? 2.0 : 1.4, false, [6,4], HOVER ? 0.15 : 0.5);
+  }
+
+  z.interfaces.forEach(f => {
+    const a = alphaFor(f.id);
+    if (a <= 0.11) return;
+    plot(i => S[f.id][i], f.color, BIG ? 2.8 : 1.9, true, f.dash, a);
+  });
+
+  // End-of-line labels, tail-preserving so the distinguishing part survives.
+  const labels = [];
+  z.interfaces.forEach(f => {
+    if (MUTED[f.id]) return;
+    const b = S[f.id];
+    let li = -1;
+    for (let i=TS.length-1;i>=i0;i--){ if (b[i]){ li = i; break; } }
+    if (li < 0) return;
+    labels.push({name:clipTail(f.short, BIG ? 16 : 18), color:f.color,
+                 y:Y(b[li].rx, 1), alpha:alphaFor(f.id)});
+  });
+  labels.sort((a,b) => a.y - b.y);
+  const minGap = fs(14);
+  for (let i=1;i<labels.length;i++){
+    if (labels[i].y - labels[i-1].y < minGap) labels[i].y = labels[i-1].y + minGap;
+  }
+  const overflow = labels.length ? labels[labels.length-1].y - (h - P.b) : 0;
+  if (overflow > 0) labels.forEach(l => l.y -= overflow);
+
+  g.textAlign = 'left';
+  g.textBaseline = 'middle';
+  g.font = '600 '+fs(11)+'px '+font;
+  labels.forEach(l => {
+    g.fillStyle = withAlpha(l.color, l.alpha);
+    g.fillText(l.name, w - P.r + 8, Math.max(P.t, Math.min(h - P.b, l.y)));
+  });
+
+  if (CUR >= i0 && CUR < TS.length){
+    const x = Math.round(X(CUR)) + 0.5;
+    g.strokeStyle = cssv('--cursor'); g.setLineDash([3,3]); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(x,P.t); g.lineTo(x,h-P.b); g.stroke();
+    g.setLineDash([]);
+    z.interfaces.forEach(f => {
+      if (MUTED[f.id]) return;
+      const p = S[f.id][CUR]; if (!p) return;
+      for (const dir of [1,-1]){
+        g.beginPath(); g.arc(x, Y(dir>0?p.rx:p.tx, dir), 3.5, 0, 6.3);
+        g.fillStyle = f.color; g.fill();
+        g.strokeStyle = cssv('--dot-outline'); g.lineWidth = 1; g.stroke();
+      }
+    });
+  }
+}
+
+function render(){
+  // Tile contents change height when a value gains a unit or an interface goes
+  // down, so re-measure before drawing. It is a handful of reads for one to
+  // three zones.
+  layoutCharts();
+  paintTop();
+  ZONES.forEach(z => {
+    draw(z);
+    paintTiles(z);
+    paintZoneNow(z);
+  });
+  document.getElementById('f-n').textContent = TS.length;
+}
+
+/* ---------- interaction ------------------------------------------------ */
+function onMove(e, z){
+  const cv = document.getElementById('c-'+z.id);
+  const P = pads();
+  const r = cv.getBoundingClientRect();
+  const n = Math.min(WIN, TS.length);
+  if (n < 2) return;
+  const i0 = TS.length - n;
+  const pw = cv.clientWidth - P.l - P.r;
+  if (pw <= 0) return;
+  const frac = (e.clientX - r.left - P.l) / pw;
+  CUR = Math.max(i0, Math.min(TS.length-1, Math.round(i0 + frac*(n-1))));
+  render();
+
+  const rows = [];
+  ZONES.forEach(zz => {
+    rows.push('<tr><td colspan="3" style="color:#5b6874;padding-top:5px">'+(zz.name||zz.id)+'</td></tr>');
+    zz.interfaces.forEach(f => {
+      // Raw samples here, never the smoothed line: the tooltip is where you go
+      // to read an exact figure.
+      const p = (BUF[f.id]||[])[CUR];
+      const nm = '<span class="csw" style="background:'+f.color+'"></span>' + clipTail(f.short, 22);
+      rows.push('<tr><td class="n">'+nm+'</td>'
+        + (p ? '<td class="v">'+bps(p.rx)+'</td><td class="d">'+bps(p.tx)+'</td>'
+             : '<td class="v" style="color:#e05c52">down</td><td class="d">—</td>') + '</tr>');
+    });
+  });
+  const tip = document.getElementById('tip');
+  tip.innerHTML = '<div class="tt">'+hhmmss(TS[CUR])
+    + ' &nbsp;·&nbsp; <span style="color:var(--dn)">'+DOWN_ARROW+' DOWNLOAD</span>'
+    + ' / <span style="color:var(--up)">'+UP_ARROW+' UPLOAD</span></div>'
+    + '<table>'+rows.join('')+'</table>';
+  tip.style.display = 'block';
+  tip.style.left = Math.min(window.innerWidth - tip.offsetWidth - 10, e.clientX + 16)+'px';
+  tip.style.top  = Math.min(window.innerHeight - tip.offsetHeight - 10, e.clientY + 16)+'px';
+}
+
+document.getElementById('w15').onclick = function(){
+  WIN = Math.max(2, Math.floor(900*1000/POLL));
+  this.classList.add('on'); document.getElementById('w60').classList.remove('on'); render();
+};
+document.getElementById('w60').onclick = function(){
+  WIN = CAPN;
+  this.classList.add('on'); document.getElementById('w15').classList.remove('on'); render();
+};
+document.getElementById('bagg').onclick = function(){
+  AGG = !AGG; this.classList.toggle('on', AGG); render();
+};
+document.getElementById('bsmooth').onclick = function(){
+  SMOOTH = !SMOOTH; this.classList.toggle('on', SMOOTH);
+  try { localStorage.setItem('fgwan.smooth', SMOOTH ? '1' : '0'); } catch(e){}
+  render();
+};
+document.getElementById('bpause').onclick = function(){
+  PAUSED = !PAUSED; this.textContent = PAUSED ? 'resume' : 'pause';
+  this.classList.toggle('on', PAUSED);
+};
+function wallScale(){
+  if(!BIG) return 1;
+  if(innerWidth>=3000) return 2.35;
+  if(innerWidth>=2200) return 2.10;
+  return 1.90;
+}
+function applyWallScale(){document.documentElement.style.setProperty('--big',wallScale());}
+document.getElementById('bbig').onclick = function(){
+  BIG = !BIG;
+  applyWallScale();
+  document.body.classList.toggle('wall', BIG);
+  this.classList.toggle('on', BIG);
+  try { localStorage.setItem('fgwan.big', BIG ? '1' : '0'); } catch(e){}
+  // Let the scaled chrome reflow, then re-measure and redraw.
+  requestAnimationFrame(() => { layoutCharts(true); render(); });
+};
+
+function applyTheme(theme){
+  const t=theme==='light'?'light':'dark';
+  document.documentElement.dataset.theme=t;
+  document.documentElement.style.colorScheme=t;
+  const b=document.getElementById('btheme');
+  b.textContent=t==='dark'?'light':'dark';b.classList.toggle('on',t==='light');
+  try{localStorage.setItem('fgwan.theme',t)}catch(e){}
+  render();
+}
+document.getElementById('btheme').onclick=()=>applyTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
+
+try {
+  applyTheme(localStorage.getItem('fgwan.theme') || (matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'));
+  if (localStorage.getItem('fgwan.smooth') === '1') document.getElementById('bsmooth').click();
+  if (localStorage.getItem('fgwan.big')    === '1') document.getElementById('bbig').click();
+} catch(e){}
+
+window.addEventListener('resize', () => { applyWallScale(); layoutCharts(true); render(); });
+
+// Anything that reflows the chrome changes how much height the charts get, so
+// watch the pieces rather than relying on resize alone.
+if (window.ResizeObserver){
+  // layoutCharts() writes canvas heights, which resizes #zones and would
+  // retrigger this observer. Coalescing to one frame lets it settle: the
+  // second pass finds the heights already correct, writes nothing, and the
+  // loop ends.
+  let pending = false;
+  const ro = new ResizeObserver(() => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => {
+      pending = false;
+      if (layoutCharts(true)) render();
+    });
+  });
+  ['topbar','note','footer','zones'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) ro.observe(el);
+  });
+}
+
+boot().catch(e => setNote('err', 'Failed to load: ' + e));
+</script>
+</body>
+</html>

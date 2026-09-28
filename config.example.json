@@ -1,0 +1,69 @@
+// Example only - setup writes the real file.
+//
+// You do not normally edit this by hand. Open the dashboard and click
+// "configure": the wizard walks the device, shows you a diff of what will
+// change, and applies the result to the running collector without a restart.
+// On a headless server use `fgwan -setup-console` instead.
+//
+// NOTE: there are no passphrases in this file, by design. SNMPv3 credentials
+// live in the platform key store (DPAPI on Windows).
+//
+// ZONES ARE FREE-FORM. A zone is just one chart on the dashboard. Define as
+// many as you like, name them whatever suits you, and put any interface in
+// any zone - physical members and IPsec tunnels may be mixed in the same
+// zone. The only rule is that an interface belongs to exactly one zone, so
+// zone totals never double-count a series. The example below groups by site
+// rather than by interface kind, to make the point.
+{
+  "device": {
+    "host": "10.20.0.1",
+    "port": 161,
+    "timeout_ms": 2000,
+    "retries": 1,
+    "v3": {
+      "username": "fgt-monitor",
+      "security_level": "authPriv",
+      "auth_protocol": "SHA256",
+      "priv_protocol": "AES128",
+      "context": ""
+    }
+  },
+
+  "poll_interval_ms": 5000,
+  "window_seconds": 3600,
+  "rediscover_seconds": 300,
+  "spike_guard_multiplier": 10,
+
+  "vpn_table": {
+    "enabled": true,
+    "base_oid": "1.3.6.1.4.1.12356.101.12.2.2.1",
+    "col_phase2_name": 3,
+    "col_in_octets": 18,
+    "col_out_octets": 19,
+    "col_status": 20,
+    "status_up_value": 2
+  },
+
+  "zones": [
+    {
+      "id": "z1",
+      "name": "Internet Uplinks",
+      "subtitle": "3 interfaces",
+      "interfaces": [
+        { "id": "if_port1", "match": "port1", "label": "ILL-PRIMARY",   "kind": "phys", "speed_mbps": 1000, "color": "#4FC3F7" },
+        { "id": "if_port2", "match": "port2", "label": "ILL-SECONDARY", "kind": "phys", "speed_mbps": 500,  "color": "#FFB300" },
+        { "id": "if_port5", "match": "port5", "label": "BB-BACKUP",     "kind": "phys", "speed_mbps": 200,  "color": "#AB47BC" }
+      ]
+    },
+    {
+      "id": "z2",
+      "name": "Colombo DC",
+      "subtitle": "1 interface + 2 tunnels",
+      "interfaces": [
+        { "id": "if_port3",      "match": "port3",     "label": "DC-CROSSCONNECT", "kind": "phys",   "speed_mbps": 1000, "color": "#4FC3F7" },
+        { "id": "vpn_VPN_DC_DR", "match": "VPN-DC-DR", "label": "DR site",         "kind": "tunnel", "speed_mbps": 200,  "color": "#FFB300" },
+        { "id": "vpn_VPN_SASE",  "match": "VPN-SASE",  "label": "SASE PoP",        "kind": "tunnel", "speed_mbps": 100,  "color": "#AB47BC" }
+      ]
+    }
+  ]
+}
